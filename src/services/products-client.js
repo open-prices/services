@@ -7,8 +7,13 @@ var seneca = require('seneca')({
 }).use('mesh').use(readyBanner).ready(function(){
 
     main.call(this)
+    //create.call(this)
 
 })
+
+function create(){
+
+}
 
 function main(){
     var barcode = process.argv[2]
@@ -18,8 +23,8 @@ function main(){
 
     console.time('products')
     this.act(action, (err, response) => {
-        console.log(JSON.stringify(response.data, null, 2))
         console.error(err)
+        console.log(JSON.stringify(response && response.data, null, 2))
         console.timeEnd('products')
         seneca.close()
     })

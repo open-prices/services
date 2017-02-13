@@ -6,10 +6,14 @@ export const NAME = 'CACHE/CACHE'
 export const GET = 'CACHE/GET'
 export const SET = 'CACHE/SET'
 export const OPTIONS = 'CACHE/OPTIONS'
+export const STATS = 'CACHE/STATS'
 
 export const patterns = (function(){
 
     var patterns = {
+        echo : {
+            service : NAME
+        },
         set: {
             service: NAME,
             type: SET
@@ -21,6 +25,10 @@ export const patterns = (function(){
         options : {
             service : NAME,
             type : OPTIONS
+        },
+        stats : {
+            service : NAME,
+            type : STATS
         }
     }
     return patterns
@@ -39,6 +47,11 @@ export const patterns = (function(){
     exports.options = function options(namespace, options={}){
         return Object.assign({}, patterns.options, {
             stdTTL : options.stdTTL
+        })
+    }
+    exports.stats = function stats(namespace){
+        return Object.assign({}, patterns.stats, {
+            namespace
         })
     }
 })(exports);
@@ -81,6 +94,8 @@ export default function cache(options = {}) {
     })
     this.add(patterns.options, (action, done) => {
 
+        console.info('OPTIONS', namespace)
+
         var {
             namespace,
             stdTTL
@@ -95,6 +110,22 @@ export default function cache(options = {}) {
         })
 
         done(null, res(true))
+
+    })
+    this.add(patterns.stats, function onStats(action, done){
+
+        console.info('STATS', STATS)
+        
+        var stats = Object.keys(caches).map(namespace => {
+            return {
+                [namespace] : {
+                    stats : caches[namespace].getStats(),
+                    keys : caches[namespace].keys()
+                }
+            }
+        }).reduce((e1, e2) => Object.assign(e1, e2), {})
+        
+        done(null, res(stats))
 
     })
 
@@ -128,9 +159,8 @@ export function useCache(options = {}){
     var seneca = this
 
     if (!options.namespace) {
-        var err = new Error('useCacheError')
+        var err = new Error('useCacheError', 'No namespace.')
         console.error(err)
-        process.exit(-1)
     }
 
 
@@ -174,6 +204,14 @@ export function useCache(options = {}){
 
     }
 
+    seneca.add({
+        init : 'useCache'
+    }, function(action, done){
+        done()
+    })
+
+    return 'useCache'
+
 }
 
 
@@ -185,7 +223,7 @@ export function CacheClient(seneca, namespace){
     var self = this
     this.set = (key, value) => {
         return new Promise(function(resolve, reject){
-            var action = set(namespace, key, value)
+            var action = exports.set(namespace, key, value)
             seneca.act(action, (err, response) => {
                 err ? reject(err) : resolve(response)
             })
@@ -193,7 +231,7 @@ export function CacheClient(seneca, namespace){
     }
     this.get = (key) => {
         return new Promise(function(resolve, reject){
-            var action = get(namespace, key)
+            var action = exports.get(namespace, key)
             seneca.act(action, (err, response) => {
                 err ? reject(err) : resolve(response.data)
             })
@@ -201,9 +239,9 @@ export function CacheClient(seneca, namespace){
     }
     this.options = (options) => {
         return new Promise(function(resolve, reject){
-            var action = options(namespace, options)
+            var action = exports.options(namespace, options)
             seneca.act(action, (err, response) => {
-                err ? reject(err) : resolve(response.data)
+                err ? reject(err) : resolve(response)
             })
         })
     }

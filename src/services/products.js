@@ -10,10 +10,14 @@ var {
 export const NAME = 'PRODUCTS/PRODUCTS'
 export const GET = 'PRODUCTS/GET'
 export const ALL = 'PRODUCTS/GET_ALL'
+export const CREATE = 'PRODUCTS/CREATE'
 
 export const patterns = (function () {
 
     var patterns = {
+        echo: {
+            service: NAME
+        },
         getProduct: {
             service: NAME,
             type: GET
@@ -21,6 +25,10 @@ export const patterns = (function () {
         getProducts: {
             service: NAME,
             type: ALL
+        },
+        createProduct: {
+            service: NAME,
+            type: CREATE
         }
     }
     //patterns.getProductById = Object.assign({}, patterns.getProduct, { byId: true })
@@ -38,6 +46,11 @@ export const patterns = (function () {
     exports.getProducts = function getProducts() {
         return Object.assign({}, patterns.getProducts)
     }
+    exports.createProduct = function createProduct(product = {}) {
+        return Object.assign({}, patterns.createProduct, {
+            product
+        })
+    }
 
 })(exports);
 
@@ -48,16 +61,17 @@ export default function products(options = {}) {
     var res = Response.bind(this)
 
     this.add(patterns.getProduct, onGetProduct)
-
+    this.add(patterns.getProduct, function validation(action, done) {
+        if (!action.barcode) {
+            return done(new Error('Barcode missing.'))
+        }
+        this.prior(action, done)
+    })
     function onGetProduct(action, done) {
 
         console.log(patterns.getProduct)
 
         var { barcode } = action
-
-        if (!barcode) {
-            return done(new Error('Barcode missing.'))
-        }
 
         Product.findOne({
             where: { barcode },
@@ -65,11 +79,14 @@ export default function products(options = {}) {
         }).then(product => {
             var p = product.get()
             done(null, res(p))
-        }).catch(err => console.error(err))
+        }).catch(err => {
+            done(err)
+        })
 
     }
 
-    this.add(patterns.getProducts, function onGetProducts(action, done) {
+    this.add(patterns.getProducts, onGetProducts)
+    function onGetProducts(action, done) {
 
         console.log(patterns.getProducts)
 
@@ -78,8 +95,33 @@ export default function products(options = {}) {
         }).then(products => {
             var ps = products.map(p => p.get())
             done(null, res(ps))
+        }).catch(err => {
+            done(err)
         })
 
+    }
+
+    this.add(patterns.createProduct, onCreateProduct)
+    this.add(patterns.createProduct, function validate(action, done) {
+        this.prior(action, done)
     })
+    function onCreateProduct(action, done) {
+
+        console.log(patterns.createProduct)
+
+        var { product } = action
+
+        var { barcode } = product
+
+        Product.create({
+            barcode
+        }).then(product => {
+            var p = product.get()
+            done(null, res(p))
+        }).catch(err => {
+            done(err)
+        })
+
+    }
 
 }
