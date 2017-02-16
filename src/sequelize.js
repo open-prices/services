@@ -1,4 +1,4 @@
-import { connection } from './database-models'
+import { connection } from 'database-models'
 
 var sequelize = connection({
     logging : null
