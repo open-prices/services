@@ -20,6 +20,12 @@ seneca.use('mesh', {
     listen: PINS
 }).use(products).use(useCache, {
     namespace : NAME,
-    listen : PINS,
-    log : console.info
+    listen : PINS
 }).use(readyBanner)
+
+seneca.use(function () {
+    var seneca = this
+    this.add(patterns.echo, function (action, done) {
+        done(null, seneca)
+    })
+})
