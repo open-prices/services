@@ -1,58 +1,68 @@
-import NodeCache from 'node-cache'
-
 import Response from './response'
 import sequelize from '../sequelize'
-var {
-    Product,
-    Price
-} = sequelize.models
 
-export const NAME = 'PRODUCTS/PRODUCTS'
-export const GET = 'PRODUCTS/GET'
-export const ALL = 'PRODUCTS/GET_ALL'
-export const CREATE = 'PRODUCTS/CREATE'
+var { Product, Price } = sequelize.models
+
+export const NAME = 'PRODUCTS'
+export const GET = 'GET'
+export const ALL = 'ALL'
+export const CREATE = 'CREATE'
 
 export const patterns = (function () {
 
     var patterns = {
-        echo: {
-            service: NAME
-        },
+        echo: {},
         getProduct: {
-            service: NAME,
-            type: GET
+            TYPE: GET
         },
         getProducts: {
-            service: NAME,
-            type: ALL
+            TYPE: ALL
+        },
+        getProductPrices: {
+            TYPE: 'PRICES'
         },
         createProduct: {
-            service: NAME,
-            type: CREATE
+            TYPE: CREATE
         }
     }
-    //patterns.getProductById = Object.assign({}, patterns.getProduct, { byId: true })
+    patterns.getProductAveragePrice = Object.assign({}, patterns.getProductPrices, { average: true })
+    Object.keys(patterns).map(name => {
+        Object.assign(patterns[name], { SERVICE: NAME })
+    })
 
     return patterns
 
 })();
 
-(function actionCreators(exports) {
-
-    exports.getProduct = function getProduct(barcode) {
+var actions = {
+    getProduct(barcode) {
         return Object.assign({}, patterns.getProduct, { barcode })
-    }
-
-    exports.getProducts = function getProducts() {
+    },
+    getProductPrices(barcode) {
+        return Object.assign({}, patterns.getProductPrices, { barcode })
+    },
+    getProductAveragePrice(barcode) {
+        return Object.assign({}, patterns.getProductAveragePrice, { barcode })
+    },
+    getProducts() {
         return Object.assign({}, patterns.getProducts)
-    }
-    exports.createProduct = function createProduct(product = {}) {
+    },
+    createProduct(product = {}) {
         return Object.assign({}, patterns.createProduct, {
             product
         })
     }
+}
+Object.assign(exports, actions)
 
-})(exports);
+var middleware = {
+    barcodeRequired: function barcodeRequired(action, done) {
+        if (!action.barcode) {
+            return done(new Error('Barcode missing.'))
+        }
+        this.prior(action, done)
+    }
+}
 
 export default function products(options = {}) {
 
@@ -61,12 +71,7 @@ export default function products(options = {}) {
     var res = Response.bind(this)
 
     this.add(patterns.getProduct, onGetProduct)
-    this.add(patterns.getProduct, function validation(action, done) {
-        if (!action.barcode) {
-            return done(new Error('Barcode missing.'))
-        }
-        this.prior(action, done)
-    })
+    this.add(patterns.getProduct, middleware.barcodeRequired)
     function onGetProduct(action, done) {
 
         console.log(patterns.getProduct)
@@ -85,13 +90,56 @@ export default function products(options = {}) {
 
     }
 
+    this.add(patterns.getProductPrices, onGetProductPrices)
+    this.add(patterns.getProductPrices, middleware.barcodeRequired)
+    function onGetProductPrices(action, done) {
+
+        var { barcode } = action
+
+        Price.all({
+            include: [{
+                model: Product,
+                where: {
+                    barcode
+                }
+            }]
+        }).then(prices => {
+            var jsons = prices.map(p => p.get())
+            done(null, res(jsons))
+        }).catch(err => {
+            done(err)
+        })
+
+    }
+    this.add(patterns.getProductAveragePrice, function onGetProductAveragePrice(action, done) {
+
+        var { barcode } = action
+
+        var new_action = seneca.util.clean(action)
+        delete new_action.average
+
+        seneca.act(new_action, function (err, response) {
+
+            if (err) return done(err)
+            if (!response.data.length) return done(null, res(null))
+
+            var prices = response.data.map(p => p.price)
+
+            var avg = prices.reduce((a, b) => (a + b) / 2)
+
+            done(null, res(avg, { action, prices }))
+
+        })
+
+    })
+
     this.add(patterns.getProducts, onGetProducts)
     function onGetProducts(action, done) {
 
         console.log(patterns.getProducts)
 
         Product.all({
-            include: [{ all: true }]
+            include: action.includeAll ? [{ all: true }] : null
         }).then(products => {
             var ps = products.map(p => p.get())
             done(null, res(ps))
