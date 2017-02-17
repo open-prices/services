@@ -8,39 +8,16 @@ var app = express();
 app.use(logger('dev'));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
-app.use(express.static(path.join(__dirname, 'public')));
+
+var public_path = path.join(__dirname, '../../src/webapi', 'public')
+app.use(express.static(public_path));
 
 
 
 var seneca = require('./seneca-client')
 
-
-app.get('/services', (req, res, next) => {
-    seneca.act({
-        role: 'mesh',
-        get: 'members'
-    }, (err, response) => {
-        if (err) return next(err)
-        var { list } = response
-        res.json({
-            pins: list.map(service => service.pin),
-            list,
-        })
-    })
-})
-app.get('/services/:service', (req, res, next) => {
-
-    var { service } = req.params
-    service = service.toUpperCase()
-
-    seneca.act({
-        service: service + '/' + service
-    }, (err, response) => {
-        if (err) return next(err)
-        res.json(response)
-    })
-
-})
+app.use('/api', require('./routes/api'))
+app.use(require('./routes/services'))
 
 app.use(function (req, res, next) {
     var err = new Error('Not Found');
