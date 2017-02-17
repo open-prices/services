@@ -8,11 +8,4 @@ var seneca = require('seneca')({
     log : 'silent'
 }).use('mesh', {
     listen : PINS
-}).use(cacheService).use(readyBanner).ready(function(){
-    setInterval(function(){
-        seneca.act(stats(), function(err, response){
-            console.error(err)
-            console.log(response && response.data)
-        })
-    }, 1000 * 5)
-})
+}).use(cacheService).use(readyBanner)
