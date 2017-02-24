@@ -1,6 +1,3 @@
-require('./services/base-service').default.ready(function () {
 
-    require('./services/cache-service')
-    require('./services/products-service')
-
-})
+export var products = require('./services/products')
+export var vendors = require('./services/vendors')
