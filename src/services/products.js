@@ -1,7 +1,7 @@
 import Response from './response'
 import sequelize from '../sequelize'
 
-var { Product, Price } = sequelize.models
+var { Product, ProductName, Price } = sequelize.models
 
 export const NAME = 'PRODUCTS'
 export const GET = 'GET'
@@ -123,7 +123,10 @@ export default function products(options = {}) {
             if (err) return done(err)
             if (!response.data.length) return done(null, res(null))
 
-            var prices = response.data.map(p => p.price)
+            var prices = response.data.filter(p => {
+                var week_ago = new Date(new Date() - (1000 * 60 * 60 * 24 * 7 * 2))
+                return week_ago < p.date
+            }).map(p => p.price)
 
             var avg = prices.reduce((a, b) => (a + b) / 2)
 
@@ -159,17 +162,62 @@ export default function products(options = {}) {
 
         var { product } = action
 
-        var { barcode } = product
+        var { barcode, name } = product
 
-        Product.create({
-            barcode
-        }).then(product => {
+        Product.findOrCreate({
+            where: { barcode }
+        }).then(([product, created]) => {
+
             var p = product.get()
             done(null, res(p))
+
+            return ProductName.create({
+                name,
+                ProductId: product.id,
+                UserId: 1
+            })
+
         }).catch(err => {
             done(err)
         })
 
     }
+
+    this.add({
+        SERVICE: NAME,
+        TYPE: 'PRODUCT_NAME'
+    }, function onCalculateProductName(action, done) {
+
+        var { id, barcode } = action
+
+        var sql_commonName = 'SELECT p.id, pn.name, COUNT(1) as c FROM "ProductNames" as pn JOIN "Products" as p ON pn."ProductId"=p.id WHERE p.id=:id GROUP BY p.id, pn.name ORDER BY c DESC'
+        if (!id) {
+            sql_commonName = 'SELECT p.id, pn.name, COUNT(1) as c FROM "ProductNames" as pn JOIN "Products" as p ON pn."ProductId"=p.id WHERE p.barcode=:barcode GROUP BY p.id, pn.name ORDER BY c DESC'
+        }
+
+        sequelize.query(sql_commonName, {
+            replacements: {
+                barcode
+            }
+        }).then(([rs, meta]) => rs[0]).then(rs => {
+            if (!rs) {
+                return done(null, res(null))
+            }
+            done(null, res(rs.name))
+
+            var sql = 'UPDATE "Products" SET name=:name WHERE id=:id'
+            return sequelize.query(sql, {
+                replacements: {
+                    id: rs.id,
+                    name: rs.name
+                }
+            }).catch(err => {
+                console.log(err)
+            })
+
+
+        })
+
+    })
 
 }
